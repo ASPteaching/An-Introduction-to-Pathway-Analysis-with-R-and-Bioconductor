@@ -46,28 +46,28 @@ bioCifnot ("Rgraphviz")
 
 # Introduction
 
-This document provides *some examples* on the analyses that can be perfomed on one or more gene lists to help gain biological insight on the results of a differential expression analysis. Overall these analyses are known as _Functional Analysis_.
+This document provides *some examples* on the analyses that can be perfomed on one or more gene lists to help gain biological insight on the results of a differential expression analysis. Overall these analyses are known as _Pathway  Analysis_ or, also, _Functional Analysis_. 
 
 Functional analysis can be performed in many different ways that lead to similar (or not-so-similar) results.  Because there is not a universal acceptance of what is a *complete, well done functional analysis* some different approaches will be shown.
 
 ## Input Data for Functional Analysis
 
-Functional analysis can be made, on a first approach on
+Functional analysis can be made, on a first approach on:
 
-- A list of genes selected by being differentially expressed in a given experimental setting.
-- The whole list of genes -or even the whole expression matrix- that has been used in the analysis.
+- One or more lists of genes __selected__ for being differentially expressed in a given experimental setting. In this case we usually work with gene identifiers.
+- One or more list of values measuring the difference between groups (i.e. Fold Changes, p-values, or t-statistics) for all genes being  compared.
 
-Most tools require that gene list consist of gene identifiers in some standard notation such as `Entrez`, `ENSEMBL` or other related to these.
+Most tools require that gene list consist of gene identifiers in some standard notation such as `Entrez`, `ENSEMB` or other related to these.
 
 These gene lists can be usually extracted from output tables provided by microarrays or RNA-seq data analysis tools.
 
-The analysis below is applied on a set of three gene lists obtained from a cancer study, but it can be easily extended to more lists or other studies.
+The analysis below is applied on a set gene lists obtained from a cancer study, but it can be easily extended to more lists or other studies.
 
 ## Read data
 
-We start by reading two files that contain the expression values (`expres_AvsB.csv2`) and the results (`Top_AvsB.csv2`) of a differential expression analysis erformed using microarrays.
+We start by reading two files that contain the expression values (`expres_AvsB.csv2`) and the results (`Top_AvsB.csv2`) of a differential expression analysis performed using microarrays.
 
-The code and text for the analysis that, using these data, generated these tables, can be found at: [https://github.com/alexsanchezpla/scripts/tree/master/Exemple_Analisis_BioC](https://github.com/alexsanchezpla/scripts/tree/master/Exemple_Analisis_BioC)
+The code and text for the analysis that, using these data, generated these tables, can be found at: [https://github.com/ASPteaching/Ejemplo_de_Analisis_de_Microarrays_con_Bioconductor](https://github.com/ASPteaching/Ejemplo_de_Analisis_de_Microarrays_con_Bioconductor)
 
 The code below assumes the files have been stored in a subdirectory of the current folder named `datasets`.
 
@@ -85,30 +85,29 @@ dim(expresAvsB); head(expresAvsB)
 
 A given gene list contains useful information that can be extracted by querying databases.
 
-Let us see how we can obtain information fom the _genes_ probes in table (comparison) `AvsB`. 
+Let us see how we can obtain information fom the _probesets_ in table (comparison) `AvsB`. 
 
 ```{r probes}
 myProbes <- rownames(expresAvsB)
 head(myProbes)
 ```
 
-
-We need to load the library ("package") that contains specific annotations for the microarray model that was used in this study.
- It has to be noticed also that each row does not represent a gene, but a probe, a sequence that has been designed to detect if a gene is expressed. microarrays contain multiple probes for many genes and this is something that ha to be dealt with.
+We need to load the library ("package") that contains specific annotations for the microarray type that was used in this study.
+ It has to be noticed also that each row _does not represent a gene, but a probeset_, a sequence that has been designed to detect if a given gene is expressed. Microarrays contain multiple probesets for many genes and this is something that ha to be dealt with.
  
 ## ID conversion
 
-In order to do most analyses it is convenient to use a universally accepted identifier such as Entrez or ENSEMBL.
-For instance Bioconductor organism annotation packages rely on Entrez identifiers as main key for most mappings.
+In order to do many analyses it is convenient to use a universally accepted identifier such as `Entrez` or `ENSEMBL`.
+For instance Bioconductor organism annotation packages rely on `Entrez` identifiers as main key for most mappings.
 
-It is possible to find out easily which mappings are available for each ID
+It is possible to easily find out which mappings are available for each ID.
 
 ```{r mappings}
-require(hgu133a.db)
+library(hgu133a.db)
 keytypes(hgu133a.db)
 ```
 
-Annotation packages make it possible to annotate genes and in a similar manner other omics features. For example we can obtain gene symbol, entrez ID and gene name with a single SQL instruction.
+Annotation packages make it possible to annotate genes and in a similar manner other omics features. For example, we can obtain gene symbol, entrez ID and gene name with a single SQL instruction.
 ```{r}
 geneAnots <- select(hgu133a.db, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
 head(geneAnots)
@@ -133,8 +132,7 @@ write.csv2(selectedInfo, file="selectedTopTab_AvsB.csv2")
 
 ## From gene lists to pathway analysis
 
-See [http://ithake.eu/2012/09/on-the-exploration-of-a-list-of-genes/](This post) for a simple, external, motivation on why we may want to move from gene-by-gene analysis to gene-set analyses.
-
+See (https://github.com/ASPteaching/An-Introduction-to-Pathway-Analysis-with-R-and-Bioconductor/raw/main/Slides/Intro2PathwayEnrichmentAnalysis-SHORT.pdf) for a simple explanation on why -and how- we may want to move from gene-by-gene analysis to gene-set analyses.
 
 # Basic GO Annotation
 
