@@ -1,7 +1,7 @@
 ---
 title: "An Introduction to Functional Analysis"
 author: "Alex Sanchez"
-date: "April 1st 2021"
+date: "April 4th 2021"
 output:
   html_document:
     theme: united
@@ -16,7 +16,7 @@ knitr::opts_chunk$set(fig.width=12, fig.height=8, cache=FALSE,
 options(warn=-1)
 ```
 
-```{r installation}
+```{r installPackages, eval=FALSE}
 installifnot <- function (packageName){
  if (!(require(packageName, character.only=TRUE))) {
     install.packages(packageName)
@@ -29,7 +29,7 @@ bioCifnot <- function (packageName){
     BiocManager::install(packageName)
  }else{
   detach(paste ("package", packageName, sep=":"), character.only=TRUE)
-  }  
+}  
 }
 installifnot("knitr")
 installifnot("XML") # May yield problems if some libraries (xml2-config) not available in linux
@@ -41,6 +41,7 @@ bioCifnot ("topGO")
 bioCifnot ("GSA")
 bioCifnot ("annotate")
 bioCifnot ("Rgraphviz")
+bioCifnot ("clusterProfiler")
 ```
 
 
@@ -75,7 +76,7 @@ The code below assumes the files have been stored in a subdirectory of the curre
 inputDir="datasets"
 topTabAvsB <- read.table (file.path(inputDir, "Top_AvsB.csv2"), head=T, sep=";", dec=",", row.names=1)
 expresAvsB <- read.table (file.path(inputDir, "expres_AvsB.csv2"), head=T, sep=";", dec=",", row.names=1)
-
+comparisonName <- "AvsB"
 dim(topTabAvsB); head(topTabAvsB)
 dim(expresAvsB); head(expresAvsB)
 ```
@@ -132,7 +133,9 @@ write.csv2(selectedInfo, file="selectedTopTab_AvsB.csv2")
 
 ## From gene lists to pathway analysis
 
-See (https://github.com/ASPteaching/An-Introduction-to-Pathway-Analysis-with-R-and-Bioconductor/raw/main/Slides/Intro2PathwayEnrichmentAnalysis-SHORT.pdf) for a simple explanation on why -and how- we may want to move from gene-by-gene analysis to gene-set analyses.
+Pathway Analysis is an extensive field of research and application and the aim of this document is not to summarize it but simply to illustrate some applications with R.
+
+See (https://github.com/ASPteaching/An-Introduction-to-Pathway-Analysis-with-R-and-Bioconductor/raw/main/Slides/Intro2PathwayEnrichmentAnalysis-SHORT.pdf) for an introduction to the topic.
 
 # Basic GO Annotation
 
@@ -165,13 +168,25 @@ Select the "top 5" genes from the list
 ```{r top25}
 probes <- rownames(expresAvsB)[1:5]
 ```
-For simplicity retrieve its Gene Symbol and Entrez identifiers using predefined functions ("wrappers") available in the `annotate` package.
+
+In the first versions of Bioconductor, identifiers were managed using environments and functions such as `get` or `mget`. While it still works, nowadays it has been substituted by the use of the `select` function which allows for a muach easier retrieving of identifiers.
+
+`Select` returns a data.frame. If we need a character vector we can obtain it using an ad-hoc function sucha as the simple`charFromSelect`below.
 
 ```{r}
+charFromSelect <- function(df,posNames=1, posValues=2){
+  res <- df[,posValues]
+  names(res) <- df[,posNames]
+  return(res)
+}
+  
 require(annotate)
-entrezs <- unlist(mget (probes, hgu133aENTREZID))
-simbols <- unlist(mget (probes, hgu133aSYMBOL))
+geneIDs <-  select(hgu133a.db, probes, c("ENTREZID", "SYMBOL"))
+entrezs <-  charFromSelect(geneIDs, 1, 2)
+simbols <-  charFromSelect(geneIDs, 1, 3) 
 ```
+
+For Gene Ontology identifiers the old-style accession is kept until a new version of the document is produced.
 
 Now proceed to retrieve GO information on these probes:
 ```{r}
@@ -190,31 +205,6 @@ Indeed the third-level list can also be considered as an instance of a class def
 to know more about this class.
 
 The following code will perform a wise unlist of the `GOAcc` list
-
-<!-- ```{r} -->
-<!-- x<-0 -->
-<!-- for (i in 1:length(GOAcc)){x<-x+length(GOAcc[[i]])} -->
-<!-- numGOterms <- x -->
-<!-- res<- matrix(data = NA, nrow = numGOterms, ncol = 6) -->
-<!-- actualrow<-1 -->
-<!-- for (i in 1:length(GOAcc)){ -->
-<!--     if (GOAcc[i]=="NA"){ -->
-<!--       reg<-c(names(GOAcc[i]), entrezs[i], simbols[i], rep("NA",3)) -->
-<!--     res[actualrow,]<-unlist(reg) -->
-<!--     actualrow<-actualrow+1} -->
-<!--     else{ -->
-<!--           for (j in 1:length(GOAcc[[i]])){ -->
-<!--             reg<-c(names(GOAcc[i]), entrezs[i], simbols[i],  -->
-<!--                 GOAcc[[i]][[j]]$GOID, -->
-<!--                 GOAcc[[i]][[j]]$Ontology, -->
-<!--                 GOAcc[[i]][[j]]$Evidence) # or Evidence if preferred -->
-<!--             res[actualrow,]<-unlist(reg) -->
-<!--             actualrow<-actualrow+1}}} -->
-<!-- rownames(res)=rep(NULL,dim(res)[1]) -->
-<!-- res<-as.data.frame(res) -->
-<!-- names(res)<-c("Affy-ID","Entrez", "Gene Symbol", "GOID","Ontology","Evidence") -->
-<!-- print(head(res)) -->
-<!-- ``` -->
 
 ```{r GOtable}
 # % WANING
@@ -260,8 +250,16 @@ GOgenes_All <- mget(myGO[1], org.Hs.egGO2ALLEGS)
 
 
 # Gene Enrichment Analysis
-  
-A gene enrichment analysis is applied on a "truncated" list of genes that one considers to be differentially expressed.
+
+There are two main types of enrichment analysis:
+
+- _Over-Representation Analysis_ takes a list of differentially expressed genes and it searches for biological categories in which a number of genes appear with "unusually" high frequencies. That is it looks for genes appearing more often than they would be expected by chance in any category.
+
+- _Gene Set Expression Analyses_ works with __all__ genes and looks for differentially expressed gene sets (categories). That is it searches for categories that, without containing an unusually high number of differentially expressed genes, are associated with genes that are in the upper or lower parts of the list of genes ordered by some measure of intensity of difference, such as the "log-Fold Change".
+
+## Over-Representation Analysis 
+
+Over-Representation Analysis is applied on a "truncated" list of genes that one considers to be differentially expressed.
 
 These are checked for enrichment versus a "Universe" gene list, usually, all the genes that have entered in the analysis
 
@@ -276,7 +274,15 @@ allMyGenes <-topTab$adj.P.Val
 names(allMyGenes)<-rownames(topTab)
 ```
 
-The analysis is performed by creating hyperparameters that are used to invoke the analysis functions
+Many packages can be used to do a Gene Enrichment Analysis. Each of them perfoms slightly different analysis but the underlying ideas are the same. Some of these packages are:
+
+- GOstats
+- topGO
+- gprofiler
+- clusterProfiler
+
+
+The analysis is performed by creating hyperparameters that are used to invoke the analysis functions. 
 ```{r}
 require(topGO)
 data(geneList) # adds function "topDiffGenes"
@@ -314,36 +320,83 @@ plot(score(Myenrichment_Fisher), score(Myenrichment_KS)[names(score(Myenrichment
 print(showGroupDensity(myGOData, enrich_table[1, "GO.ID"], ranks=TRUE))
 ```
 
-# Gene Set Enrichment Analysis
+## Gene Set Enrichment Analysis
 
 If, instead of relying on the gene lists we decided to use all the genes on the array and confront them to _selected sets of genes_ we may use the *Gene Set Enrichment Analysis* approach.
 
-There are many GSA implementations. We present here an applicarion of Efron's GSA method (http://statweb.stanford.edu/~tibs/GSA/).
+### Classical GSEA
 
-```{r, eval=FALSE}
-require(GSA)
-xAB <- expresAvsB
-yAB <- substr(colnames(expresAvsB),1,1)
-yABnum <- ifelse(yAB=="A",1,2)
-allProbes <- rownames(expresAvsB)
-allEntrezs <- as.integer(select(hgu133a.db, allProbes, "ENTREZID")[,2])
-allSymbols <- select(hgu133a.db, allProbes, "SYMBOL")
-geneset.obj <-GSA.read.gmt("h.all.v5.2.entrez.gmt")
-GSA.obj<-GSA(xAB, yABnum, genenames=allEntrezs, genesets=geneset.obj,  
-             resp.type="Two class unpaired", nperms=200)
+The `clusterProfiler` package implements the classical GSEA method as introduced by Subramanian et alt (2005).
+
+
+```{r}
+entrezIDs <- AnnotationDbi::select(hgu133a.db, rownames(topTabAvsB), c("ENTREZID"))
+entrezIDs <- charFromSelect(entrezIDs)
+geneList <- cbind(topTabAvsB, ENTREZ =entrezIDs)
+
+#ordenem per logFC absolut per eliminar els duplicats amb menor logFC absolut
+geneList <- geneList[order(abs(geneList$logFC), decreasing=T),]
+geneList <- geneList[ !duplicated(geneList$ENTREZ), ]  ### Keep highest
+    #tornem a ordenar per logFC per fer el GSEA
+geneList <- geneList[order(geneList$logFC, decreasing=T),]
+genesVector <- geneList$logFC
+names(genesVector) <- geneList$ENTREZ
+
+
+#fixem seed per reproduibilitat dels resultats
+#  set.seed(123)
+library(clusterProfiler)
+gseResulti <- gseKEGG(geneList = genesVector,
+                      organism = "hsa",
+                      keyType = "kegg",
+                      exponent = 1,
+                      minGSSize = 10,maxGSSize = 500,
+                      pvalueCutoff = 0.05,pAdjustMethod = "BH",
+                      # nPerm = 10000, #augmentem permutacions a 10000
+                      verbose = TRUE,
+                      use_internal_data = FALSE,
+                      seed = TRUE,
+                      eps=0,
+                      by = "fgsea"
+                )
+
+# keggResultsList[[i]] <- gseResulti
 ```
-For simplicity retrieve its Gene Symbol and Entrez identifiers using predefined functions ("wrappers") available in the `annotate` package.
 
-```{r, eval=FALSE}
-require(annotate)
-entrezs <- unlist(mget (probes, hgu133aENTREZID))
-simbols <- unlist(mget (probes, hgu133aSYMBOL))
- Provar amb 1000?
-  sink()
-  cat("\nConjuntos de genes que aparecen en la comparacion: ",matNames[i],"\n")
-  cat("=====================================================================","\n")  
-  show(GSA.listsets(GSA.obj, geneset.names=genesetsNames, FDRcut=.5))
-}
+
+```{r results='asis'}
+library(kableExtra)
+gsea.result <- setReadable(gseResulti, OrgDb = org.Hs.eg.db, keyType ="ENTREZID" )
+
+gsea.result.df <- as.data.frame(gsea.result)
+print(kable(gsea.result.df[,c("Description","setSize","NES","p.adjust")])%>% scroll_box(height = "500px"))
+  
 ```
 
+
+```{r eval=TRUE}
+library(ggplot2)
+# for (i in 1:length(files)){
+#   cat("\nComparison: ", namesC[i],"\n")
+   cat("DOTPLOT\n")
+#   if(nrow(keggResultsList[[i]]) > 0){
+ if(nrow(gseResulti) > 0){
+   p<- dotplot(gseResulti, showCategory = 20, font.size = 15,
+            title =paste("Enriched Pathways\n", comparisonName ,
+            split=".sign") + facet_grid(.~.sign))
+   plot(p)
+   cat("\nENRICHMENT MAP\n")
+   em<- emapplot(gseResulti)
+   plot(em)
+   #guardem en pdf
+   pdf(file = paste0("KEGGplots.",comparisonName,".pdf"), 
+                        width = 14, height = 14)
+   print(p)
+   print(em)
+   dev.off()
+   }else{
+      cat("\nNo enriched terms found\n")
+ }
+
+```
 
