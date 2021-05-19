@@ -8,6 +8,8 @@ output:
     toc: yes
   pdf_document:
     toc: yes
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r global_options, include=FALSE}
@@ -38,7 +40,6 @@ bioCifnot ("hgu133a.db")
 bioCifnot ("GO.db")
 bioCifnot ("GOstats")
 bioCifnot ("topGO")
-bioCifnot ("GSA")
 bioCifnot ("annotate")
 bioCifnot ("Rgraphviz")
 bioCifnot ("clusterProfiler")
@@ -103,7 +104,7 @@ For instance Bioconductor organism annotation packages rely on `Entrez` identifi
 
 It is possible to easily find out which mappings are available for each ID.
 
-```{r mappings}
+```{r mappings0}
 library(hgu133a.db)
 keytypes(hgu133a.db)
 ```
@@ -136,6 +137,9 @@ write.csv2(selectedInfo, file="selectedTopTab_AvsB.csv2")
 Pathway Analysis is an extensive field of research and application and the aim of this document is not to summarize it but simply to illustrate some applications with R.
 
 See (https://github.com/ASPteaching/An-Introduction-to-Pathway-Analysis-with-R-and-Bioconductor/raw/main/Slides/Intro2PathwayEnrichmentAnalysis-SHORT.pdf) for an introduction to the topic.
+
+The most used database in Pathway Analysis is the Gene Ontology, which, as suggested by its name, is not a dabase but an ontology. The `GO.db` can be accessed using the same syntaxis
+ as with gene identifiers.
 
 # Basic GO Annotation
 
@@ -186,25 +190,8 @@ entrezs <-  charFromSelect(geneIDs, 1, 2)
 simbols <-  charFromSelect(geneIDs, 1, 3) 
 ```
 
-For Gene Ontology identifiers the old-style accession is kept until a new version of the document is produced.
 
-Now proceed to retrieve GO information on these probes:
-```{r}
-GOAcc<-mget(probes,env=hgu133aGO)
-GOAcc[[1]][1:5]
-```
 
-You might
-This is a rather complicated list, indeed it is a list of lists of lists, that is
-
-1. One list for each gene/ID containing
-2. One list for each GO annotation for this gene containing
-3. One list with the GOID, The Ontology and the Evidence Code
-
-Indeed the third-level list can also be considered as an instance of a class defined in the `annotate` package: the class `Goterm`. Type `? GOTerm`
-to know more about this class.
-
-The following code will perform a wise unlist of the `GOAcc` list
 
 ```{r GOtable}
 # % WANING
@@ -219,6 +206,21 @@ The resulting tables can be printed or saved.
 ```{r echo=TRUE}
 print(head(res, n=10))
 print(head(res1, n=10))
+```
+
+### What do these GO:XXXXXXX mean?
+
+We can query the GO.db package
+
+
+```{r mappings}
+library(GO.db)
+keytypes(GO.db)
+```
+
+```{r}
+queryTerms <- res1$GO[1:3]
+select(GO.db, queryTerms, c("GOID", "ONTOLOGY","TERM" ))
 ```
 
 
@@ -266,59 +268,90 @@ These are checked for enrichment versus a "Universe" gene list, usually, all the
 ```{r}
 require(hgu133a.db)
 topTab <- topTabAvsB 
-entrezUniverse = unlist(mget(rownames(topTab), hgu133aENTREZID, ifnotfound=NA)) 
+probesUniverse <- rownames(topTab)
+# entrezUniverse = unlist(mget(rownames(topTab), hgu133aENTREZID, ifnotfound=NA)) 
+entrezUniverse<- select(hgu133a.db, probesUniverse, "ENTREZID")
+entrezUniverse <- entrezUniverse$ENTREZID
 whichGenes<- topTab["adj.P.Val"]<0.05 & topTab["logFC"] > 1
 sum(whichGenes)
 topGenes <-   entrezUniverse[whichGenes]
-allMyGenes <-topTab$adj.P.Val
-names(allMyGenes)<-rownames(topTab)
+
+# Remove possible duplicates
+
+topGenes <- topGenes[!duplicated(topGenes)]
+entrezUniverse <- entrezUniverse[!duplicated(entrezUniverse)]
 ```
 
 Many packages can be used to do a Gene Enrichment Analysis. Each of them perfoms slightly different analysis but the underlying ideas are the same. Some of these packages are:
 
-- GOstats
-- topGO
-- gprofiler
-- clusterProfiler
+- `GOstats`
+- `topGO`
+- `gprofiler`
+- `clusterProfiler`
 
+In this example we use `GOstats` which was one of the first packages available in Bioconduictor to do Enrichment Analysis.
 
-The analysis is performed by creating hyperparameters that are used to invoke the analysis functions. 
-```{r}
-require(topGO)
-data(geneList) # adds function "topDiffGenes"
-myGOData <- new("topGOdata", ontology="BP", 
-                allGenes=allMyGenes,
-                geneSel=topDiffGenes, nodeSize=10,  
-                annot= annFUN.db, affyLib="hgu133a.db")
+The idea for using it is pretty simple: We need to create special type of object called "Hyperparameter" which may be of class either:
 
-Myenrichment_Fisher <- runTest(myGOData, algorithm= "classic", statistic="fisher")
-Myenrichment_Fisher
+- `GOHyperGParams` if we want to do the enrichment analysis using the Gene Ontology as reference databases or
+- `KEGGHyperGParams` if we wish to do the analysis using the KEGG database, or
+- `PFAMHyperGParams` if we wish to do the analysis using the PFAM database.
 
-head(score(Myenrichment_Fisher), 25) # Displays p values for every GO term
-geneData(Myenrichment_Fisher) # A table showing Medata data for enrichment
-```
+A good strategy is to use all three.
 
-The topGO package implements different algorithms for gene set analysis.
+First, we create the hyper-parameters.
 
 ```{r}
-Myenrichment_KS <- runTest(myGOData, algorithm= "classic", statistic="ks")
+library(GOstats)
+
+# This parameter has an "ontology" argument. It may be "BP", "MF" or "CC"
+# Other arguments are taken by default. Check the help for more information.
+
+GOparams = new("GOHyperGParams",
+    geneIds=topGenes, universeGeneIds=entrezUniverse,
+    annotation="hgu133a.db", ontology="BP",
+    pvalueCutoff=0.001)
+
+# These hyperparameters do not have an "ontology" argument.
+
+KEGGparams = new("KEGGHyperGParams",
+    geneIds=topGenes, universeGeneIds=entrezUniverse,
+    annotation="hgu133a.db",
+    pvalueCutoff=0.001)
+
+PFAMparams = new("PFAMHyperGParams",
+    geneIds=topGenes, universeGeneIds=entrezUniverse,
+    annotation="hgu133a.db", 
+    pvalueCutoff=0.001)
 ```
 
-Results can be shown in tabular format
+Next, we run the analyses:
+
 ```{r}
-enrich_table <-GenTable(myGOData, classicFisher=Myenrichment_Fisher,topNodes = 20)
-adjustedEnrichP <- cbind(enrich_table, adjP=p.adjust(enrich_table$classicFisher, method = "BH"))
-head(adjustedEnrichP, n=25) # get the enrichment results as table
+GOhyper = hyperGTest(GOparams)
+KEGGhyper = hyperGTest(KEGGparams)
+PFAMhyper = hyperGTest(PFAMparams)
 ```
 
-Different visualizations are also possible
+We can extract information directly from the analysis results using `summary`:
 
 ```{r}
-showSigOfNodes(myGOData, score(Myenrichment_Fisher), firstSigNodes=5, useInfo="all") # Plot the enrichment GO graph
-gostat <- termStat(myGOData, names(score(Myenrichment_Fisher)))
-plot(score(Myenrichment_Fisher), score(Myenrichment_KS)[names(score(Myenrichment_Fisher))], xlab="P values Fisher test", ylab="P values KS test", cex=(gostat$Annotated/max(gostat$Annotated))*4, col=heat.colors(gostat$Significant))
-print(showGroupDensity(myGOData, enrich_table[1, "GO.ID"], ranks=TRUE))
+head(summary(PFAMhyper))
+dim(summary(KEGGhyper))
 ```
+
+Apart of this we can create an automated report per each result, or, with a litle more effort we can combine all outputs into a single one.
+
+
+```{r}
+# Creamos un informe html con los resultados
+comparison = "AvsB"
+GOfilename =file.path(paste("GOResults.",comparison,".html", sep=""))
+htmlReport(GOhyper, file = GOfilename, summary.args=list("htmlLinks"=TRUE))
+```
+
+The resulting file has the contents provided by the call to `summary`but with additional links.
+
 
 ## Gene Set Enrichment Analysis
 
