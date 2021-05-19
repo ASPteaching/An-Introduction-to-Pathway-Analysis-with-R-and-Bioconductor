@@ -190,8 +190,7 @@ entrezs <-  charFromSelect(geneIDs, 1, 2)
 simbols <-  charFromSelect(geneIDs, 1, 3) 
 ```
 
-
-
+Given a set of gene identifiers its _associated_ GO identifiers can be extracted from the microarrays (for probesets ids) or from the organism (for Entrez IDS) annotation package.
 
 ```{r GOtable}
 # % WANING
@@ -203,34 +202,45 @@ res1 <- select(hgu133a.db, keys=probes, keytype = "PROBEID",  columns = c("ENTRE
 ```
 
 The resulting tables can be printed or saved.
+
 ```{r echo=TRUE}
 print(head(res, n=10))
 print(head(res1, n=10))
 ```
 
-### What do these GO:XXXXXXX mean?
+This process yield GO identifiers but its meaning is not clear. For this we need to query the `GO.db package`
 
-We can query the GO.db package
+## What do these GO:XXXXXXX mean?
+
+The `We can query the `GO.db` package can be queried as any anotation package.
 
 
 ```{r mappings}
 library(GO.db)
 keytypes(GO.db)
+columns(GO.db)
 ```
+
+Assume we are only interested in the first three GO identifiers. We can obtain its name directly using the appropriate `select` call.
+First we remove duplicates then we proceed to extract information.
 
 ```{r}
-queryTerms <- res1$GO[1:3]
-select(GO.db, queryTerms, c("GOID", "ONTOLOGY","TERM" ))
+uniqueGOTerms <- unique(res1$GO)
+selectedGOTerms <- uniqueGOTerms[1:5]
+select(GO.db, selectedGOTerms, c("GOID", "ONTOLOGY","TERM" ))
 ```
-
 
 ## Navigating the GO Graph
 
-There are a series of classes to navigate up or down in the GO hierarchy
+The Gene Ontology has a hierarchichal structure. At some moment we can be interested in getting information about the ancestors or the descendants from one term. 
+
+The GO.db database contains a series of mappings that provide the _ancestors_ or _childrens_ of any given GOTerm
+
 Take the top GO Term of the previous analysis: 
+
 ```{r}
-oneTerm <- "GO:0006338"
-oneParent<-get(oneTerm, GOBPPARENTS)   # the vector of its parent terms in the BP ontology.
+oneTerm <- selectedGOTerms[1]
+oneParent <- get(oneTerm, GOBPPARENTS)   # the vector of its parent terms in the BP ontology.
 oneParent
 oneChildren<-get(oneTerm, GOBPCHILDREN) # the vector of its children terms in the BP ontolog
 oneChildren
@@ -239,16 +249,18 @@ oneOffspring
 oneChildren %in% oneOffspring
 ```
 
-Similar analyses can be done on gene lists
+While this is interesting and can be used to produce nice plots it is not directly related with Gene Enrichment Analysis and will be ignored from here on.
 
-```{r}
-require(org.Hs.eg.db) # loads the library
-myEIDs3 <-entrezs[1:3] # Create vecotor of input Entrez IDs
-myGO <- unlist(org.Hs.egGO[[as.character(myEIDs3[1])]])
-myGO_All <- mget(myEIDs3, org.Hs.egGO)
-GOgenes <- org.Hs.egGO2ALLEGS[[myGO[1]]]
-GOgenes_All <- mget(myGO[1], org.Hs.egGO2ALLEGS)
-```
+<!-- Similar analyses can be done on gene lists -->
+
+<!-- ```{r} -->
+<!-- require(org.Hs.eg.db) # loads the library -->
+<!-- myEIDs3 <-entrezs[1:3] # Create vecotor of input Entrez IDs -->
+<!-- myGO <- unlist(org.Hs.egGO[[as.character(myEIDs3[1])]]) -->
+<!-- myGO_All <- mget(myEIDs3, org.Hs.egGO) -->
+<!-- GOgenes <- org.Hs.egGO2ALLEGS[[myGO[1]]] -->
+<!-- GOgenes_All <- mget(myGO[1], org.Hs.egGO2ALLEGS) -->
+<!-- ``` -->
 
 
 # Gene Enrichment Analysis
