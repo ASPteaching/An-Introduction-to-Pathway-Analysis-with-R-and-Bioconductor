@@ -123,14 +123,11 @@ sum(selected)
 selectedTopTab <- topTabAvsB[selected,]
 selectedProbes <- rownames(selectedTopTab)
 selectedAnots <-  select(hgu133a.db, selectedProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
-selectedInfo <- cbind(selectedAnots, selectedTopTab)
+selectedTopTab2 <- cbind(PROBEID=rownames(selectedTopTab), selectedTopTab)
+# selectedInfo <- cbind(selectedAnots, selectedTopTab)
+selectedInfo = merge(selectedAnots, selectedTopTab2, by="PROBEID")
 write.csv2(selectedInfo, file="selectedTopTab_AvsB.csv2")
 ```
-
-
-<!--PER AFEGIR:  
-- Una forma senzilla de treure una taula amb els IDs dels gens hiperenllaçats 
--->
 
 ## From gene lists to pathway analysis
 
@@ -376,20 +373,19 @@ The `clusterProfiler` package implements the classical GSEA method as introduced
 
 ```{r}
 entrezIDs <- AnnotationDbi::select(hgu133a.db, rownames(topTabAvsB), c("ENTREZID"))
-entrezIDs <- charFromSelect(entrezIDs)
-geneList <- cbind(topTabAvsB, ENTREZ =entrezIDs)
+# entrezIDs <- charFromSelect(entrezIDs)
+topTabAvsB2<- cbind( PROBEID= rownames(topTabAvsB), topTabAvsB)
+geneList  <- merge(topTabAvsB2, entrezIDs, by="PROBEID")
 
-#ordenem per logFC absolut per eliminar els duplicats amb menor logFC absolut
+# sort by absolute logFC to remove duplicates with smallest absolute logFC
 geneList <- geneList[order(abs(geneList$logFC), decreasing=T),]
 geneList <- geneList[ !duplicated(geneList$ENTREZ), ]  ### Keep highest
-    #tornem a ordenar per logFC per fer el GSEA
+# re-order based on logFC to be GSEA ready
 geneList <- geneList[order(geneList$logFC, decreasing=T),]
 genesVector <- geneList$logFC
 names(genesVector) <- geneList$ENTREZ
 
-
-#fixem seed per reproduibilitat dels resultats
-#  set.seed(123)
+set.seed(123)
 library(clusterProfiler)
 gseResulti <- gseKEGG(geneList = genesVector,
                       organism = "hsa",
@@ -419,7 +415,7 @@ print(kable(gsea.result.df[,c("Description","setSize","NES","p.adjust")])%>% scr
 ```
 
 
-```{r eval=TRUE}
+```{r eval=FALSE}
 library(ggplot2)
 # for (i in 1:length(files)){
 #   cat("\nComparison: ", namesC[i],"\n")
