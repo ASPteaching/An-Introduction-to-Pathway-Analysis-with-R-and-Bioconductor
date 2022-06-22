@@ -1,13 +1,15 @@
 ---
-title: "An Introduction to Functional Analysis"
+title: "An Introduction to Pathway Analysis with R and Bioconductor"
 author: "Alex Sanchez"
-date: "April 4th 2021"
-output:
+date: "`r Sys.Date()`"
+output: 
   html_document:
-    theme: united
-    toc: yes
-  pdf_document:
-    toc: yes
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    code_folding: hide
+    theme: cerulean
+    highlight: textmate
 editor_options: 
   chunk_output_type: console
 ---
@@ -34,14 +36,14 @@ bioCifnot <- function (packageName){
 }  
 }
 installifnot("knitr")
-installifnot("XML") # May yield problems if some libraries (xml2-config) not available in linux
+installifnot("xml2") # May yield problems if some libraries (xml2-config) not available in linux
 bioCifnot ("org.Hs.eg.db")
 bioCifnot ("hgu133a.db")
 bioCifnot ("GO.db")
-bioCifnot ("GOstats")
-bioCifnot ("topGO")
 bioCifnot ("annotate")
 bioCifnot ("Rgraphviz")
+bioCifnot ("GOstats")
+# bioCifnot ("topGO")
 bioCifnot ("clusterProfiler")
 ```
 
@@ -298,7 +300,9 @@ Many packages can be used to do a Gene Enrichment Analysis. Each of them perfoms
 - `gprofiler`
 - `clusterProfiler`
 
-In this example we use `GOstats` which was one of the first packages available in Bioconduictor to do Enrichment Analysis.
+### Enrichment Analysis using `GOstats` 
+
+In this section we use `GOstats` which was one of the first packages available in Bioconduictor to do Enrichment Analysis.
 
 The idea for using it is pretty simple: We need to create special type of object called "Hyperparameter" which may be of class either:
 
@@ -339,14 +343,14 @@ Next, we run the analyses:
 ```{r}
 GOhyper = hyperGTest(GOparams)
 KEGGhyper = hyperGTest(KEGGparams)
-PFAMhyper = hyperGTest(PFAMparams)
+# PFAMhyper = hyperGTest(PFAMparams)
 ```
 
 We can extract information directly from the analysis results using `summary`:
 
 ```{r}
-head(summary(PFAMhyper))
-dim(summary(KEGGhyper))
+dim(summary(GOhyper))
+head(summary(GOhyper))
 ```
 
 Apart of this we can create an automated report per each result, or, with a litle more effort we can combine all outputs into a single one.
