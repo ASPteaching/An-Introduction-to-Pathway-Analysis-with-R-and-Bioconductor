@@ -37,13 +37,13 @@ bioCifnot <- function (packageName){
 }
 installifnot("knitr")
 installifnot("xml2") # May yield problems if some libraries (xml2-config) not available in linux
+installifnot("ggnewscale")
 bioCifnot ("org.Hs.eg.db")
 bioCifnot ("hgu133a.db")
 bioCifnot ("GO.db")
 bioCifnot ("annotate")
 bioCifnot ("Rgraphviz")
 bioCifnot ("GOstats")
-# bioCifnot ("topGO")
 bioCifnot ("clusterProfiler")
 ```
 
@@ -61,11 +61,11 @@ Functional analysis can be made, on a first approach on:
 - One or more lists of genes __selected__ for being differentially expressed in a given experimental setting. In this case we usually work with gene identifiers.
 - One or more list of values measuring the difference between groups (i.e. Fold Changes, p-values, or t-statistics) for all genes being  compared.
 
-Most tools require that gene list consist of gene identifiers in some standard notation such as `Entrez`, `ENSEMB` or other related to these.
+Most tools require that gene list consist of gene identifiers in some standard notation such as `Entrez`, `ENSEMBL` or other related to these.
 
 These gene lists can be usually extracted from output tables provided by microarrays or RNA-seq data analysis tools.
 
-The analysis below is applied on a set gene lists obtained from a cancer study, but it can be easily extended to more lists or other studies.
+The examples shown in the document use several _gene lists_ obtained from a maicroarray analysi performed on data from a breast cancer study, but it can be easily extended to more lists or other studies.
 
 ## Read data
 
@@ -113,7 +113,7 @@ keytypes(hgu133a.db)
 
 Annotation packages make it possible to annotate genes and in a similar manner other omics features. For example, we can obtain gene symbol, entrez ID and gene name with a single SQL instruction.
 ```{r}
-geneAnots <- select(hgu133a.db, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
+geneAnots <- AnnotationDbi::select(hgu133a.db, myProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
 head(geneAnots)
 ```
 
@@ -124,7 +124,7 @@ selected<- topTabAvsB[,"adj.P.Val"]<0.05 & topTabAvsB[,"logFC"] > 1
 sum(selected)
 selectedTopTab <- topTabAvsB[selected,]
 selectedProbes <- rownames(selectedTopTab)
-selectedAnots <-  select(hgu133a.db, selectedProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
+selectedAnots <-  AnnotationDbi::select(hgu133a.db, selectedProbes, c("SYMBOL", "ENTREZID", "GENENAME"))
 selectedTopTab2 <- cbind(PROBEID=rownames(selectedTopTab), selectedTopTab)
 # selectedInfo <- cbind(selectedAnots, selectedTopTab)
 selectedInfo = merge(selectedAnots, selectedTopTab2, by="PROBEID")
@@ -184,7 +184,7 @@ charFromSelect <- function(df,posNames=1, posValues=2){
 }
   
 require(annotate)
-geneIDs <-  select(hgu133a.db, probes, c("ENTREZID", "SYMBOL"))
+geneIDs <-  AnnotationDbi::select(hgu133a.db, probes, c("ENTREZID", "SYMBOL"))
 entrezs <-  charFromSelect(geneIDs, 1, 2)
 simbols <-  charFromSelect(geneIDs, 1, 3) 
 ```
@@ -196,8 +196,8 @@ Given a set of gene identifiers its _associated_ GO identifiers can be extracted
 #  The previous chunk can be substituted by the followink code chunk, shorter and more efficient.
 library(hgu133a.db)
 keytypes(hgu133a.db)
-res <- select(hgu133a.db, keys=probes, keytype = "PROBEID", columns = c("ENTREZID", "SYMBOL","ONTOLOGY"))
-res1 <- select(hgu133a.db, keys=probes, keytype = "PROBEID",  columns = c("ENTREZID", "SYMBOL","GO"))
+res <-AnnotationDbi::select(hgu133a.db, keys=probes, keytype = "PROBEID", columns = c("ENTREZID", "SYMBOL","ONTOLOGY"))
+res1 <- AnnotationDbi::select(hgu133a.db, keys=probes, keytype = "PROBEID",  columns = c("ENTREZID", "SYMBOL","GO"))
 ```
 
 The resulting tables can be printed or saved.
@@ -300,6 +300,8 @@ Many packages can be used to do a Gene Enrichment Analysis. Each of them perfoms
 - `gprofiler`
 - `clusterProfiler`
 
+We show examples on how to do it using `GOstats` and `clusterProfiler`
+
 ### Enrichment Analysis using `GOstats` 
 
 In this section we use `GOstats` which was one of the first packages available in Bioconduictor to do Enrichment Analysis.
@@ -364,6 +366,86 @@ htmlReport(GOhyper, file = GOfilename, summary.args=list("htmlLinks"=TRUE))
 ```
 
 The resulting file has the contents provided by the call to `summary`but with additional links.
+
+### Enrichment Analysis using `clusterProfiler` 
+
+GO enrichment analysis can be performed using `enrichGO` function from `clusterProfiler` package. We will perform the analysis over the Biological Process (BP) GO category.
+
+The Gene Universe, the set of all genes, can be specified as in `GOstats`or simply assumed to be all the human genes.
+
+An aside comment about the format of identifiers: 
+- `GOstats` expects entrez identifiers to be integer values stored as _characters_. 
+- `clusterProfiler` requires the same identifiers, but they have to be stored as _integers_.
+
+This means that, in order to reuse identifierswe need to recast them into one or another direction. In this case, because ` topGenes`is a character vector, to use them in Bioconductor we need to convert them into integers using `as.integer(topGenes)`.
+
+```{r}
+
+# In GOstats use the following code 
+#
+# GOparams = new("GOHyperGParams",
+#     geneIds=topGenes, universeGeneIds=entrezUniverse,
+#     annotation="hgu133a.db", ontology="BP",
+#     pvalueCutoff=0.001)
+
+library(clusterProfiler)
+
+## Run GO enrichment analysis 
+
+ego <- enrichGO(gene = as.integer(topGenes), # selgenes, 
+                # universe = entrezUniverse, # universe = all_genes,
+                keyType = "ENTREZID",
+                OrgDb = org.Hs.eg.db, 
+                ont = "BP", 
+                pAdjustMethod = "BH", 
+                qvalueCutoff = 0.25, 
+                readable = TRUE)
+head(ego, n=10)
+# Output results from GO analysis to a table
+ego_results <- data.frame(ego)
+
+write.csv(ego_results, "clusterProfiler_ORAresults_UpGO.csv")
+```
+
+### Visualization of enrichment results
+
+**Dotplot of top 10 enriched terms**
+
+```{r} 
+dotplot(ego, showCategory=10)
+```
+
+**Visualization of GO terms in hierarchy**
+
+Enriched GO terms can be visualized as a directed acyclic graph (only for GO):
+
+```{r}
+goplot(ego, showCategory=10)
+```
+
+**Gene network for the top terms**
+
+```{r}
+cnetplot(ego) 
+```
+
+**Enrichment Map**
+
+Enriched terms can be grouped by some similarity measure (eg. overlap of genes between terms) to summarize the results.
+
+```{r}
+## Enrichmap clusters the 50 most significant (by adj.P.Va) GO terms to visualize relationships between terms
+library(enrichplot)
+ego_sim <- pairwise_termsim(ego)
+emapplot(ego_sim, cex_label_category=0.5)
+```
+
+**Note:**
+
+For overrepresentation analysis based on **Reactome Pathways** database one can use function `enrichPathway` from `ReactomePA` package.
+
+**Challenge**: perform an overrepresentation analysis of the top down-regulated genes with a logFC < -2 and adjusted p-value < 0.05 over the GO-BP ontology.
+
 
 
 ## Gene Set Enrichment Analysis
