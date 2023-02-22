@@ -1,0 +1,140 @@
+---
+title: "Compare Enrichment Methods"
+author: "Alex Sanchez and Mireia_Ferrer"
+date: "`r Sys.Date()`"
+toc: true
+format:
+  html:
+    embed-resources: true
+    theme: cerulean
+execute:
+  warning: false
+---
+
+# Introduction
+
+We are often faced with the fact that distinct ORA methods yield distinct results.
+While its is reasonable, due to small differences in algorithms, databases or parameters, we sholud be, ideally able to tune the methods so that differences are minimal or, at least, previsible.
+
+In this document we start exploring some popular enrichment tools in order to find out how to reach this goal.
+
+
+# Gene lists and gene universe
+
+We will work with several gene lists that we use elsewhere.
+We start with a list of gene symbols provided by a research group.
+
+```{r}
+library(readxl)
+geneTable <- read_excel("~/Nuevo Equipo VHIR10 Dropbox/Alex al VHIR/TreballsMeus/2021-07-AnnaMessgeur-VHIR/Selected genes from SKATO.xlsx", skip = 3)
+geneList1 <- as.data.frame(geneTable)[,1]
+```
+
+These are converted to EnntrezIDs, which can be used directly by most common enrichment analysis tools
+
+```{r}
+library(org.Hs.eg.db)
+idsList1 <- AnnotationDbi::select(org.Hs.eg.db, keys=geneList1, c("ENTREZID", "SYMBOL", "ENSEMBL"), keytype="SYMBOL")
+entrezList1 <- unique(idsList1$ENTREZID)
+```
+
+As gene Universe we take all the entrez identifiers:
+
+```{r}
+entrezUniverse <- keys(org.Hs.eg.db, keytype="ENTREZID")
+length(unique(entrezUniverse))
+```
+
+With these two objects we can proceed with several enrichment analysis tools.
+
+
+# Using the tools
+
+## GOStats
+
+```{r}
+library(GOstats)
+GOparams = new("GOHyperGParams",
+    geneIds=entrezList1, 
+    universeGeneIds=entrezUniverse,
+    annotation="org.Hs.eg.db", 
+    ontology="BP",
+    pvalueCutoff=0.1, # Hyper geometric test unadjusted p-value
+    minSizeCutoff =1
+#    conditional=TRUE
+    )
+GOhyper = hyperGTest(GOparams)
+resGOstat <- summary(GOhyper)
+```
+
+```{r}
+library(openxlsx)
+wb <- createWorkbook()
+addWorksheet(wb, "GOstats")
+writeData(wb, "GOstats", resGOstat)
+```
+
+## clusterProfiler
+
+```{r}
+library(clusterProfiler)
+
+## Run GO enrichment analysis 
+
+ego <- enrichGO(gene = entrezList1, # selgenes, 
+                # universe = all_genes,
+                keyType = "ENTREZID",
+                OrgDb = org.Hs.eg.db, 
+                ont = "BP", 
+                pvalueCutoff=0.1,
+                pAdjustMethod = "none", 
+                qvalueCutoff = 0.5, 
+                minGSSize = 1,
+                maxGSSize = 1000,
+                readable = TRUE)
+head(ego, n=10)
+# Output results from GO analysis to a table
+resClusterProfiler<- data.frame(ego)
+```
+
+```{r}
+addWorksheet(wb, "clusterProfiler")
+writeData(wb, "clusterProfiler", resClusterProfiler)
+```
+
+
+## Enrichr
+
+A Bioconducto `enrichR` interface to the Enricr database is available from: [https://cran.r-project.org/web/packages/enrichR/](https://cran.r-project.org/web/packages/enrichR/vignettes/enrichR.html)
+
+```{r eval=FALSE}
+library(devtools)
+install_github("wjawaid/enrichR")
+```
+
+```{r}
+library(enrichR)
+setEnrichrSite("Enrichr") # Human genes
+websiteLive <- TRUE
+dbs <- listEnrichrDbs()
+if (is.null(dbs)) websiteLive <- FALSE
+# if (websiteLive) head(dbs)
+dbs <- c("GO_Biological_Process_2021")
+if (websiteLive) {
+    enriched <- enrichr(geneList1, dbs)
+    resEnrichR <- enriched[["GO_Biological_Process_2021"]]
+}
+
+```
+
+```{r}
+addWorksheet(wb, "EnrichR")
+writeData(wb, "EnrichR", resEnrichR)
+```
+
+```{r}
+saveWorkbook(wb, "compareEnrichment.xlsx", overwrite = TRUE)
+
+```
+
+
