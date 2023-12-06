@@ -42,7 +42,8 @@ As gene Universe we take all the entrez identifiers:
 
 ```{r}
 entrezUniverse <- keys(org.Hs.eg.db, keytype="ENTREZID")
-length(unique(entrezUniverse))
+length(entrezUniverse)
+entrezUniverseSmall <- unique(c(sample(entrezUniverse, size=15000), entrezList1))
 ```
 
 With these two objects we can proceed with several enrichment analysis tools.
@@ -66,6 +67,21 @@ GOparams = new("GOHyperGParams",
 GOhyper = hyperGTest(GOparams)
 resGOstat <- summary(GOhyper)
 ```
+
+```{r}
+GOparamsSmall = new("GOHyperGParams",
+    geneIds=entrezList1, 
+    universeGeneIds=entrezUniverseSmall,
+    annotation="org.Hs.eg.db", 
+    ontology="BP",
+    pvalueCutoff=0.1, # Hyper geometric test unadjusted p-value
+    minSizeCutoff =1
+#    conditional=TRUE
+    )
+GOhyperSmall = hyperGTest(GOparamsSmall)
+resGOstatSmall <- summary(GOhyperSmall)
+```
+
 
 ```{r}
 library(openxlsx)
@@ -135,6 +151,15 @@ writeData(wb, "EnrichR", resEnrichR)
 ```{r}
 saveWorkbook(wb, "compareEnrichment.xlsx", overwrite = TRUE)
 
+```
+
+## Una altre comparacio
+
+```{r}
+tableAll1 <- matrix (c(3,21, 48-3, 18800-21), nrow=2, byrow=TRUE)
+fisher.test(tableAll1, alternative="greater")
+tableSkato1 <- matrix (c(3,14, 48-3, 8865-14), nrow=2, byrow=TRUE)
+fisher.test(tableSkato1, alternative="greater")
 ```
 
 
